@@ -9,7 +9,9 @@
 ;   uint16_t maxValue, r14
 ;   uint16_t* gammaLut, r12
 
+.section .text.SmoothLedUpdate8cpb, "ax", @progbits
 .global SmoothLedUpdate8cpb
+.type SmoothLedUpdate8cpb, @function
 SmoothLedUpdate8cpb:
         push    YL
         push    YH
@@ -97,7 +99,3 @@ SmoothLedUpdate8cpb:
         pop     YH
         pop     YL
         ret
-
-        ; extra delay cycles for RAM based gamma LUT
-    2:  nop
-        rjmp    1b

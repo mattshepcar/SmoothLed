@@ -58,13 +58,13 @@ void SmoothLed::update(uint16_t deltaTime)
     Interpolator* i = m_Interpolators;
     uint16_t count = m_NumInterpolators;
     uint8_t ditherMask = m_DitherMask;
-    uint8_t maxvalue = m_GammaLutSize - 1;
+    uint16_t maxvalue = (m_GammaLutSize - 1) * 256 - 1;
     const uint16_t* gammaLut = m_GammaLut;
     CCL.CTRLA |= CCL_ENABLE_bm;
     if (m_HighCycles <= 4)
     {
         // cycle counted loop for maximum throughput
-        SmoothLedUpdate8cpb(count, i, outport, dt, ditherMask, maxvalue * 256 - 1, gammaLut);
+        SmoothLedUpdate8cpb(count, i, outport, dt, ditherMask, maxvalue, gammaLut);
     }
     else
     {
@@ -83,7 +83,7 @@ uint8_t SmoothLed::Interpolator::update(uint8_t dt, const uint16_t* lut, uint16_
     value = fmac(value, step, dt); //value += (step * dt) >> 7;
     if (value < 0)
         value = 0;
-    if (highByte(maxvalue) <= highByte(value))
+    if (highByte(maxvalue) < highByte(value))
         value = maxvalue;
     lut += highByte(value);
     uint16_t corrected = lerp(lut[0], lut[1], lowByte(value)) + dither;
@@ -126,10 +126,7 @@ void SmoothLed::setTarget(uint16_t index, const uint8_t* target, uint16_t count,
         i++->setTarget(*target++, range, fraction);
     } while (--count);
 }
-
 void SmoothLed::Interpolator::setTarget(uint16_t target, uint16_t fraction)
 {
-    value = target;
-    step = 0;
-    //step = fmul(target - value, fraction);
+    step = fmul(target - value, fraction);
 }
