@@ -1,6 +1,10 @@
 #include "SmoothLed.h"
 #include "SmoothLedMultiply.h"
 
+#ifndef SMOOTHLED_ASM_UPDATE
+#define SMOOTHLED_ASM_UPDATE 1
+#endif
+
 // Values in this table are inverted and the CCL LUT will flip them back.
 const uint16_t SmoothLed::Gamma25[Gamma25Size] =
 {
@@ -11,80 +15,73 @@ const uint16_t SmoothLed::Gamma25[Gamma25Size] =
 };
 
 SmoothLed::SmoothLed(Interpolator* interpolators, uint16_t numInterpolators,
-    uint8_t ditherMask, const uint16_t* gammaLut, uint8_t gammaLutSize)
+    DitherBits ditherMask, const uint16_t* gammaLut, uint8_t gammaLutSize)
 {
     m_Interpolators = interpolators;
     m_NumInterpolators = numInterpolators;
     m_Time = 0;
     setGammaLut(gammaLut, gammaLutSize);
-    m_DitherMask = ditherMask;
+    setDitherMask(ditherMask);
     uint8_t dither = 0;
     for (uint16_t i = 0; i < numInterpolators; ++i, dither += 26)
-        m_Interpolators[i].dither = dither;
+        interpolators[i].dither = dither;
 }
-
-extern "C" void SmoothLedUpdate8cpb(
-    uint16_t count,
-    SmoothLed::Interpolator * interpolators,
-    register8_t * outport,
-    uint8_t dt,
-    uint8_t ditherMask,
-    uint16_t maxValue,
-    const uint16_t * gammaLut);
 
 void SmoothLed::update(uint16_t deltaTime)
 {
+    isSpi() ? updateSpi(deltaTime) : updateUsart(deltaTime);
+}
+void SmoothLed::updateSpi(uint16_t deltaTime)
+{
+    beginTransactionSpi();
+    update(deltaTime, SPI0.DATA, SPI0.INTFLAGS);
+    endTransactionSpi();
+}
+void SmoothLed::updateUsart(uint16_t deltaTime)
+{
+    beginTransactionUsart();
+    update(deltaTime, USART0.TXDATAL, USART0.STATUS);
+    endTransactionUsart();
+}
+uint8_t SmoothLed::updateTime(uint16_t deltaTime)
+{
     uint8_t lastT = highByte(m_Time);
     m_Time += deltaTime;
-    uint8_t dt = highByte(m_Time) - lastT;
+    return highByte(m_Time) - lastT;
+}
 
-    register8_t* outport;
-    register8_t* statusport;
-    if (m_Spi)
+extern "C" void SmoothLedUpdate8cpb(
+    uint16_t count, SmoothLed::Interpolator * interpolators,
+    register8_t & outport,
+    uint8_t dt, uint16_t ditherMask, uint16_t maxValue,
+    const uint16_t * gammaLut, register8_t & statusport);
+
+void SmoothLed::update(uint16_t deltaTime, register8_t& data, register8_t& status)
+{
+    uint8_t dt = updateTime(deltaTime);
+    Interpolator* i = getInterpolators();
+    uint16_t count = getNumInterpolators();
+    uint8_t ditherMask = getDitherMask();
+    uint16_t maxvalue = getMaxValue();
+    const uint16_t* gammaLut = getGammaLut();
+#if SMOOTHLED_ASM_UPDATE
+    // 8 cycle per bit loop for maximum throughput at 8MHz
+    SmoothLedUpdate8cpb(count, i, data, dt, ditherMask, maxvalue, gammaLut, status);
+#else
+    do
     {
-        SPI0.CTRLA = m_Spi;
-        SPI0.CTRLB = SPI_SSD_bm | SPI_MODE_0_gc | SPI_BUFEN_bm;
-        outport = &SPI0.DATA;
-        statusport = &SPI0.INTFLAGS;
-    }
-    else
-    {
-        USART0.BAUD = m_HighCycles * 64;
-        USART0.CTRLC = USART_CMODE_MSPI_gc | USART_UCPHA_bm;
-        USART0.CTRLB = USART_TXEN_bm;
-        outport = &USART0.TXDATAL;
-        statusport = &USART0.STATUS;
-    }
-    Interpolator* i = m_Interpolators;
-    uint16_t count = m_NumInterpolators;
-    uint8_t ditherMask = m_DitherMask;
-    uint16_t maxvalue = (m_GammaLutSize - 1) * 256 - 1;
-    const uint16_t* gammaLut = m_GammaLut;
-    CCL.CTRLA |= CCL_ENABLE_bm;
-    if (m_HighCycles <= 4)
-    {
-        // cycle counted loop for maximum throughput
-        SmoothLedUpdate8cpb(count, i, outport, dt, ditherMask, maxvalue, gammaLut);
-    }
-    else
-    {
-        do
-        {
-            while (!(*statusport & USART_DREIF_bm)) {}
-            *outport = i++->update(dt, gammaLut, maxvalue, ditherMask);
-        } while (--count);
-    }
-    delayMicroseconds(10);
-    CCL.CTRLA &= ~CCL_ENABLE_bm;
+        uint8_t value = i++->update(dt, gammaLut, maxvalue, ditherMask);
+        while ((status & USART_DREIF_bm) == 0) {}
+        data = value;
+    } while (--count);
+#endif
 }
 
 uint8_t SmoothLed::Interpolator::update(uint8_t dt, const uint16_t* lut, uint16_t maxvalue, uint8_t ditherMask)
 {    
     value = fmac(value, step, dt); //value += (step * dt) >> 7;
-    if (value < 0)
-        value = 0;
     if (highByte(maxvalue) < highByte(value))
-        value = maxvalue;
+        value = value < 0 ? 0 : maxvalue;
     lut += highByte(value);
     uint16_t corrected = lerp(lut[0], lut[1], lowByte(value)) + dither;
     dither = lowByte(corrected) & ditherMask;
@@ -100,7 +97,7 @@ void SmoothLed::Interpolator::setTarget(uint8_t target, uint8_t range, uint16_t 
 }
 uint16_t SmoothLed::expandRange(uint8_t value) const
 {
-    return Interpolator::expandRange(value, m_GammaLutSize);
+    return expandRange(value, m_GammaLutSize);
 }
 void SmoothLed::setTarget(uint16_t index, uint8_t target)
 {
@@ -109,6 +106,30 @@ void SmoothLed::setTarget(uint16_t index, uint8_t target)
 void SmoothLed::setTarget(uint16_t index, uint8_t target, uint16_t fraction)
 {
     m_Interpolators[index].setTarget(target, m_GammaLutSize, fraction);
+}
+void SmoothLed::set(uint16_t index, uint8_t value)
+{
+    m_Interpolators[index].set(expandRange(value));
+}
+void SmoothLed::clear(uint8_t value)
+{
+    clear(0, m_NumInterpolators, value);
+}
+void SmoothLed::clear(uint16_t index, uint16_t count, uint8_t value)
+{
+    Interpolator* i = &m_Interpolators[index];
+    uint16_t fullvalue = expandRange(value);
+    do {
+        i++->set(fullvalue);
+    } while (--count);
+}
+void SmoothLed::set(uint16_t index, const uint8_t* values, uint16_t count)
+{
+    Interpolator* i = &m_Interpolators[index];
+    uint8_t range = m_GammaLutSize;
+    do {
+        i++->set(*values++, range);
+    } while (--count);
 }
 void SmoothLed::setTarget(uint16_t index, const uint8_t* target, uint16_t count)
 {

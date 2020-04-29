@@ -3,7 +3,7 @@
 
 inline int16_t mac(int16_t value, int16_t a, uint8_t b)
 {
-    // value += (a * b) >> 8   8 cycles
+    // value += (a * b) >> 8   9 cycles
     asm volatile(R"(
         mulsu   %B[a], %[b] ; (signed) ah * b
         add     %A[value], r0
@@ -22,7 +22,7 @@ inline int16_t mac(int16_t value, int16_t a, uint8_t b)
 
 inline int16_t fmac(int16_t value, int16_t a, uint8_t b)
 {
-    // value += (a * b) >> 7   11 cycles
+    // value += (a * b) >> 7   10 cycles
     asm volatile(R"(
         fmul    %A[a], %[b] ; (al * b) << 1
         adc     %B[value], %[zero]
@@ -30,7 +30,6 @@ inline int16_t fmac(int16_t value, int16_t a, uint8_t b)
         adc     %B[value], %[zero]
 
         fmulsu  %B[a], %[b] ; ((signed) ah * b) << 1
-        sbc     %B[value], %[zero]
         add     %A[value], r0
         adc     %B[value], r1
 
