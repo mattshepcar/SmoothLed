@@ -29,7 +29,10 @@ SmoothLed::SmoothLed(Interpolator* interpolators, uint16_t numInterpolators,
 
 void SmoothLed::update(uint16_t deltaTime)
 {
-    isSpi() ? updateSpi(deltaTime) : updateUsart(deltaTime);
+    if (isSpi())
+        updateSpi(deltaTime);
+    else
+        updateUsart(deltaTime);
 }
 void SmoothLed::updateSpi(uint16_t deltaTime)
 {
@@ -52,9 +55,9 @@ uint8_t SmoothLed::updateTime(uint16_t deltaTime)
 
 extern "C" void SmoothLedUpdate8cpb(
     uint16_t count, SmoothLed::Interpolator * interpolators,
-    register8_t & outport,
+    register8_t& outport,
     uint8_t dt, uint16_t ditherMask, uint16_t maxValue,
-    const uint16_t * gammaLut, register8_t & statusport);
+    const uint16_t * gammaLut, register8_t& statusport);
 
 void SmoothLed::update(uint16_t deltaTime, register8_t& data, register8_t& status)
 {
@@ -77,6 +80,30 @@ void SmoothLed::update(uint16_t deltaTime, register8_t& data, register8_t& statu
 #endif
 }
 
+extern "C" void SmoothLedUpdate(
+    uint16_t count, SmoothLed::Interpolator * interpolators,
+    uint8_t* outputBuffer,
+    uint8_t dt, uint16_t ditherMask, uint16_t maxValue,
+    const uint16_t * gammaLut);
+
+void SmoothLed::update(uint8_t* outputBuffer, uint16_t deltaTime)
+{
+    uint8_t dt = updateTime(deltaTime);
+    Interpolator* i = getInterpolators();
+    uint16_t count = getNumInterpolators();
+    uint8_t ditherMask = getDitherMask();
+    uint16_t maxvalue = getMaxValue();
+    const uint16_t* gammaLut = getGammaLut();
+#if SMOOTHLED_ASM_UPDATE
+    SmoothLedUpdate(count, i, outputBuffer, dt, ditherMask, maxvalue, gammaLut);
+#else
+    do
+    {
+        *outputBuffer++ = i++->update(dt, gammaLut, maxvalue, ditherMask);
+    } while (--count);
+#endif
+}
+
 uint8_t SmoothLed::Interpolator::update(uint8_t dt, const uint16_t* lut, uint16_t maxvalue, uint8_t ditherMask)
 {    
     value = fmac(value, step, dt); //value += (step * dt) >> 7;
@@ -87,25 +114,25 @@ uint8_t SmoothLed::Interpolator::update(uint8_t dt, const uint16_t* lut, uint16_
     dither = lowByte(corrected) & ditherMask;
     return highByte(corrected);
 }
-void SmoothLed::Interpolator::setTarget(uint8_t target, uint8_t range)
+void SmoothLed::Interpolator::setFadeTarget(uint8_t target, uint8_t range)
 {
-    setTarget(expandRange(target, range));
+    setFadeTarget(expandRange(target, range));
 }
-void SmoothLed::Interpolator::setTarget(uint8_t target, uint8_t range, uint16_t fraction)
+void SmoothLed::Interpolator::setFadeTarget(uint8_t target, uint8_t range, uint16_t fraction)
 {
-    setTarget(expandRange(target, range), fraction);
+    setFadeTarget(expandRange(target, range), fraction);
 }
 uint16_t SmoothLed::expandRange(uint8_t value) const
 {
     return expandRange(value, m_GammaLutSize);
 }
-void SmoothLed::setTarget(uint16_t index, uint8_t target)
+void SmoothLed::setFadeTarget(uint16_t index, uint8_t target)
 {
-    m_Interpolators[index].setTarget(target, m_GammaLutSize);
+    m_Interpolators[index].setFadeTarget(target, m_GammaLutSize);
 }
-void SmoothLed::setTarget(uint16_t index, uint8_t target, uint16_t fraction)
+void SmoothLed::setFadeTarget(uint16_t index, uint8_t target, uint16_t fraction)
 {
-    m_Interpolators[index].setTarget(target, m_GammaLutSize, fraction);
+    m_Interpolators[index].setFadeTarget(target, m_GammaLutSize, fraction);
 }
 void SmoothLed::set(uint16_t index, uint8_t value)
 {
@@ -131,23 +158,23 @@ void SmoothLed::set(uint16_t index, const uint8_t* values, uint16_t count)
         i++->set(*values++, range);
     } while (--count);
 }
-void SmoothLed::setTarget(uint16_t index, const uint8_t* target, uint16_t count)
+void SmoothLed::setFadeTarget(uint16_t index, const uint8_t* target, uint16_t count)
 {
     Interpolator* i = &m_Interpolators[index];
     uint8_t range = m_GammaLutSize;
     do {
-        i++->setTarget(*target++, range);
+        i++->setFadeTarget(*target++, range);
     } while (--count);
 }
-void SmoothLed::setTarget(uint16_t index, const uint8_t* target, uint16_t count, uint16_t fraction)
+void SmoothLed::setFadeTarget(uint16_t index, const uint8_t* target, uint16_t count, uint16_t fraction)
 {
     Interpolator* i = &m_Interpolators[index];
     uint8_t range = m_GammaLutSize;
     do {
-        i++->setTarget(*target++, range, fraction);
+        i++->setFadeTarget(*target++, range, fraction);
     } while (--count);
 }
-void SmoothLed::Interpolator::setTarget(uint16_t target, uint16_t fraction)
+void SmoothLed::Interpolator::setFadeTarget(uint16_t target, uint16_t fraction)
 {
     step = fmul(target - value, fraction);
 }
