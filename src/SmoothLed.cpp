@@ -19,7 +19,7 @@ SmoothLed::SmoothLed(Interpolator* interpolators, uint16_t numInterpolators,
 {
     m_Interpolators = interpolators;
     m_NumInterpolators = numInterpolators;
-    m_Time = 0;
+    m_Time = 0x8000;
     setGammaLut(gammaLut, gammaLutSize);
     setDitherMask(ditherMask);
     uint8_t dither = 0;
@@ -27,29 +27,36 @@ SmoothLed::SmoothLed(Interpolator* interpolators, uint16_t numInterpolators,
         interpolators[i].dither = dither;
 }
 
-void SmoothLed::update(uint16_t deltaTime)
+void SmoothLed::update()
 {
     if (isSpi())
-        updateSpi(deltaTime);
+        updateSpi();
     else
-        updateUsart(deltaTime);
+        updateUsart();
 }
-void SmoothLed::updateSpi(uint16_t deltaTime)
+void SmoothLed::updateSpi()
 {
     beginTransactionSpi();
-    update(deltaTime, SPI0.DATA, SPI0.INTFLAGS);
+    update(SPI0.DATA, SPI0.INTFLAGS);
     endTransactionSpi();
 }
-void SmoothLed::updateUsart(uint16_t deltaTime)
+void SmoothLed::updateUsart()
 {
     beginTransactionUsart();
-    update(deltaTime, USART0.TXDATAL, USART0.STATUS);
+    update(USART0.TXDATAL, USART0.STATUS);
     endTransactionUsart();
 }
-uint8_t SmoothLed::updateTime(uint16_t deltaTime)
+void SmoothLed::beginFade(uint16_t numFrames)
+{
+    m_Time = 0;
+    m_DeltaTime = uint16_t(0x8000) / numFrames;
+}
+uint8_t SmoothLed::updateTime()
 {
     uint8_t lastT = highByte(m_Time);
-    m_Time += deltaTime;
+    m_Time += m_DeltaTime;
+    if (highByte(m_Time) > 0x80)
+        m_Time = 0x8000;
     return highByte(m_Time) - lastT;
 }
 
@@ -59,9 +66,9 @@ extern "C" void SmoothLedUpdate8cpb(
     uint8_t dt, uint16_t ditherMask, uint16_t maxValue,
     const uint16_t * gammaLut, register8_t& statusport);
 
-void SmoothLed::update(uint16_t deltaTime, register8_t& data, register8_t& status)
+void SmoothLed::update(register8_t& data, register8_t& status)
 {
-    uint8_t dt = updateTime(deltaTime);
+    uint8_t dt = updateTime();
     Interpolator* i = getInterpolators();
     uint16_t count = getNumInterpolators();
     uint8_t ditherMask = getDitherMask();
@@ -86,9 +93,9 @@ extern "C" void SmoothLedUpdate(
     uint8_t dt, uint16_t ditherMask, uint16_t maxValue,
     const uint16_t * gammaLut);
 
-void SmoothLed::update(uint8_t* outputBuffer, uint16_t deltaTime)
+void SmoothLed::update(uint8_t* outputBuffer)
 {
-    uint8_t dt = updateTime(deltaTime);
+    uint8_t dt = updateTime();
     Interpolator* i = getInterpolators();
     uint16_t count = getNumInterpolators();
     uint8_t ditherMask = getDitherMask();
@@ -174,6 +181,14 @@ void SmoothLed::setFadeTarget(uint16_t index, const uint8_t* target, uint16_t co
         i++->setFadeTarget(*target++, range, fraction);
     } while (--count);
 }
+void SmoothLed::clearFadeTarget(uint16_t index, uint16_t count)
+{
+    Interpolator* i = &m_Interpolators[index];
+    do {
+        i++->stop();
+    } while (--count);
+}
+
 void SmoothLed::Interpolator::setFadeTarget(uint16_t target, uint16_t fraction)
 {
     step = fmul(target - value, fraction);

@@ -1,10 +1,9 @@
 // SmoothLED for tinyAVR-0/1 series
 // Matt Shepcar 25/04/2020
 
-#ifndef _SmoothLedCcl_h
-#define _SmoothLedCcl_h
+#pragma once
 
-#include "arduino.h"
+#include <Arduino.h>
 
 class SmoothLedCcl
 {
@@ -230,5 +229,3 @@ inline bool SmoothLedCcl::isSpi() const
 {
     return m_Spi != 0;
 }
-
-#endif // _SmoothLedCcl_h

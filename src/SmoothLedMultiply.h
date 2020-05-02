@@ -1,5 +1,4 @@
-#ifndef _SmoothLedMultiply_h
-#define _SmoothLedMultiply_h
+#pragma once
 
 inline int16_t mac(int16_t value, int16_t a, uint8_t b)
 {
@@ -77,5 +76,3 @@ inline uint16_t lerp(uint16_t a, uint16_t b, uint8_t t)
 {
     return mac(a, b - a, t);
 }
-
-#endif // _SmoothLedMultiply_h

@@ -1,8 +1,7 @@
 // SmoothLED for tinyAVR-0/1 series
 // Matt Shepcar 25/04/2020
 
-#ifndef _SmoothLed_h
-#define _SmoothLed_h
+#pragma once
 
 #include "SmoothLedCcl.h"
 
@@ -21,25 +20,30 @@ public:
         DitherBits ditherMask = DITHER5,
         const uint16_t* gammaLut = Gamma25, uint8_t gammaLutSize = Gamma25Size);
 
-    void update(uint8_t* outputBuffer, uint16_t deltaTime = 0);
-    void update(uint16_t deltaTime = 0);
-    void updateSpi(uint16_t deltaTime = 0);
-    void updateUsart(uint16_t deltaTime = 0);
+    void update(uint8_t* outputBuffer);
+    void update();
+    void updateSpi();
+    void updateUsart();
 
     void set(uint16_t index, uint8_t value);
     void set(uint16_t index, const uint8_t* values, uint16_t count);
     void clear(uint8_t value = 0);
     void clear(uint16_t index, uint16_t count, uint8_t value = 0);
 
+    void beginFade(uint16_t numFrames);
+    bool isFading() const;
+
     void setFadeTarget(uint16_t index, uint8_t target);
     void setFadeTarget(uint16_t index, uint8_t target, uint16_t fraction); // Q1.15 fraction (0x8000 = 1.0)
     void setFadeTarget(uint16_t index, const uint8_t* target, uint16_t count);
     void setFadeTarget(uint16_t index, const uint8_t* target, uint16_t count, uint16_t fraction);
+    void clearFadeTarget();
+    void clearFadeTarget(uint16_t index, uint16_t count);
 
     void setGammaLut(const uint16_t* gammaLut, uint8_t numEntries);
     void setDitherMask(DitherBits ditherMask);
 
-    uint8_t         updateTime(uint16_t deltaTime);
+    uint8_t         updateTime();
 
     Interpolator*   getInterpolators();
     Interpolator&   getInterpolator(uint16_t index);
@@ -71,12 +75,13 @@ public:
     };
 
 private:
-    void update(uint16_t deltaTime, register8_t& data, register8_t& status);
+    void update(register8_t& data, register8_t& status);
 
     Interpolator*   m_Interpolators;
     const uint16_t* m_GammaLut;
     uint16_t        m_NumInterpolators;
     uint16_t        m_Time;
+    uint16_t        m_DeltaTime;
     uint8_t         m_GammaLutSize;
     uint8_t         m_DitherMask;
 };
@@ -141,5 +146,11 @@ inline void SmoothLed::Interpolator::set(uint16_t newvalue)
     value = newvalue;
     step = 0;
 }
-
-#endif
+inline bool SmoothLed::isFading() const
+{
+    return highByte(m_Time) < 0x80;
+}
+inline void SmoothLed::clearFadeTarget()
+{
+    clearFadeTarget(0, m_NumInterpolators);
+}
