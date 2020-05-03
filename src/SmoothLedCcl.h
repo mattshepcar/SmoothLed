@@ -112,7 +112,7 @@ inline void SmoothLedCcl::beginTimer(ClockSetting sck, volatile TCB_t& tcb,
         m_Spi = SPI_CLK2X_bm | SPI_PRESC_DIV64_gc | SPI_MASTER_bm | SPI_ENABLE_bm;
     }
     tcb.EVCTRL = TCB_CAPTEI_bm;
-    tcb.CCMP = TCB0.CNT = max(nsToCycles(lowPulseNs) - 1, 1) + max(m_HighCycles - 5, 0);
+    tcb.CCMP = tcb.CNT = max(nsToCycles(lowPulseNs) - 1, 1) + max(m_HighCycles - 5, 0);
     tcb.CTRLB = TCB_CNTMODE_SINGLE_gc | TCB_ASYNC_bm;
     tcb.CTRLA = TCB_CLKSEL_CLKDIV1_gc | TCB_ENABLE_bm;
 }
