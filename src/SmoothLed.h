@@ -31,6 +31,10 @@ public:
     void clear(uint16_t index, uint16_t count, uint8_t value = 0);
 
     void beginFade(uint16_t numFrames);
+    void setFadeRate(uint16_t speed);
+    void setFadePosition(uint16_t speed);
+    uint16_t getFadePosition() const;
+    uint16_t getFadeRate() const;
     bool isFading() const;
 
     void setFadeTarget(uint16_t index, uint8_t target);
@@ -149,6 +153,14 @@ inline void SmoothLed::Interpolator::set(uint16_t newvalue)
 inline bool SmoothLed::isFading() const
 {
     return highByte(m_Time) < 0x80;
+}
+inline uint16_t SmoothLed::getFadePosition() const
+{
+    return m_Time;
+}
+inline uint16_t SmoothLed::getFadeRate() const
+{
+    return m_DeltaTime;
 }
 inline void SmoothLed::clearFadeTarget()
 {

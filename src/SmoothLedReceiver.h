@@ -1,30 +1,27 @@
 #pragma once
 
 #include "SmoothLedBuffer.h"
+#include "SmoothLedMultiply.h"
 
-template<int TPacketsPerFrame, int TPacketSize, int TNumBufferedFrames>
+template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
 class SmoothLedReceiver
 {
 public:
-    static const int PacketsPerFrame = TPacketsPerFrame;
-    static const int PacketSize = TPacketSize;
-    static const int NumBufferedFrames = TNumBufferedFrames;
+    SmoothLedReceiver() : m_Leds(m_Interpolators, PacketsPerFrame * PacketSize) {}
 
-    SmoothLedReceiver();
-
-    uint8_t  update(uint8_t minUpdatesPerFrame = 15, uint8_t maxPacketInterval = 250);
-    void     receive(uint8_t frame, uint8_t packet, const uint8_t* data, uint8_t idealFrameStart = PacketsPerFrame + 4);
-    uint8_t* receive(uint8_t frame, uint8_t packet, uint8_t idealFrameStart = PacketsPerFrame + 4);
+    uint8_t  update(uint8_t minUpdatesPerFrame = 25, uint16_t maxPacketInterval = 250);
+    uint8_t* receive(uint8_t frame, uint8_t packet, uint8_t idealFrameStart = 0x40);
+    void     receive(uint8_t frame, uint8_t packet, const uint8_t* data, uint8_t idealFrameStart = 0x40);
 
     SmoothLed& getLeds() { return m_Leds; }
 
 private:
-    uint8_t m_FrameCount = 0;
+    uint8_t m_Frame = 0;
     uint8_t m_LastReceivedFrame = 0;
     uint8_t m_UpdateCount = 0;
     uint8_t m_TimeSinceLastFrame = 0;
-    uint8_t m_FrameLength = 0;
-    int8_t  m_FrameDrift = 0;
+    int16_t m_LastError = 0;
+    int16_t m_ErrorI = 0;
 
     SmoothLed m_Leds;
     SmoothLed::Interpolator m_Interpolators[PacketSize * PacketsPerFrame];
@@ -32,95 +29,79 @@ private:
 };
 
 template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
-SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::SmoothLedReceiver()
-:   m_Leds(m_Interpolators, PacketsPerFrame * PacketSize)
-{
-}
-
-template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
 uint8_t SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::update(
-    uint8_t minUpdatesPerFrame, uint8_t maxPacketInterval
-)
+    uint8_t minUpdatesPerFrame, uint16_t maxPacketInterval)
 {
     ++m_UpdateCount;
     ++m_TimeSinceLastFrame;
     if (m_TimeSinceLastFrame >= maxPacketInterval)
     {
         // connection lost, reset 
-        m_FrameLength = 0;
+        m_Leds.setFadeRate(0);
         for (auto& buf : m_Buffer)
             buf.reset();
     }
 
-    if (m_UpdateCount >= minUpdatesPerFrame && !m_Leds.isFading())
+    if (!m_Leds.isFading() && m_UpdateCount >= minUpdatesPerFrame)
     {
-        ++m_FrameCount;
+        m_Leds.setFadePosition(m_Leds.getFadePosition() - 0x8000);
         m_UpdateCount = 0;
-        if (m_FrameLength)
-        {
-            m_Leds.beginFade(m_FrameLength);
-        }
+        ++m_Frame;
     }
 
     if (m_UpdateCount < PacketsPerFrame)
     {
         uint16_t index = m_UpdateCount * PacketSize;
-        m_Buffer[m_UpdateCount].update(m_FrameCount, m_Leds, index);
+        m_Buffer[m_UpdateCount].update(m_Frame, m_Leds, index);
     }
 
     return m_UpdateCount;
 }
 
-template<int ppf, int ps, int nbf>
-uint8_t* SmoothLedReceiver<ppf, ps, nbf>::receive(uint8_t frame, uint8_t packet,
-    uint8_t idealFrameStart)
+template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
+uint8_t* SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::receive(
+    uint8_t frame, uint8_t packet, uint8_t idealFrameStart)
 {
     uint8_t framesElapsed = frame - m_LastReceivedFrame;
     if (framesElapsed > 0)
     {
         m_LastReceivedFrame = frame;
 
-        if (m_FrameLength == 0)
+        uint16_t fadeRate = m_Leds.getFadeRate();
+        if (fadeRate == 0)
         {
-            if (framesElapsed == 1 && m_TimeSinceLastFrame > PacketsPerFrame)
+            if (framesElapsed == 1 && m_TimeSinceLastFrame >= PacketsPerFrame * 2)
             {
-                m_UpdateCount = idealFrameStart + packet;
-                m_FrameLength = m_TimeSinceLastFrame;
+                m_UpdateCount = m_TimeSinceLastFrame >> 2;
+                m_Frame = frame - NumBufferedFrames;
+                m_Leds.beginFade(m_TimeSinceLastFrame);
+                m_Leds.setFadePosition(0x2000);
             }
+            m_TimeSinceLastFrame = 0;
         }
-        else
+        else if (packet < 3)
         {
-            int8_t frameDrift = m_UpdateCount - packet - idealFrameStart;
-            if (frameDrift > 0)
-            {
-                if (++m_FrameDrift > 1)
-                {
-                    --m_FrameLength;
-                    m_FrameDrift = 0;
-                }
-            }
-            else if (frameDrift < 0)
-            {
-                if (--m_FrameDrift < -1)
-                {
-                    ++m_FrameLength;
-                    m_FrameDrift = 0;
-                }
-            }
-            else
-            {
-                m_FrameDrift = 0;
-            }
+            uint16_t estimate = ((m_Frame + NumBufferedFrames) << 8) + highByte(m_Leds.getFadePosition() << 1);
+            uint16_t actual = (frame << 8) + idealFrameStart;
+            int16_t error = actual - estimate;
+            // proportional error
+            fadeRate += error >> 2; 
+            // integral error
+            m_ErrorI += (error * m_TimeSinceLastFrame) >> 4;
+            fadeRate += m_ErrorI >> 8;
+            // differential error
+            fadeRate += (error - m_LastError) * 64 / m_TimeSinceLastFrame; 
+            m_LastError = error;
+            m_Leds.setFadeRate(fadeRate);
+            m_TimeSinceLastFrame = 0;
         }
-        m_TimeSinceLastFrame = 0;
     }        
-    return m_Buffer[packet].getWriteBuffer(m_FrameCount + NumBufferedFrames + 1);
+    return m_Buffer[packet].getWriteBuffer(frame);
 }
 
 template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
-void SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::receive(uint8_t frame, uint8_t packet,
+inline void SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::receive(uint8_t frame, uint8_t packet,
     const uint8_t* data, uint8_t idealFrameStart)
 {
-    if (packet < PacketsPerFrame)
-        memcpy(receive(frame, packet, idealFrameStart), data, PacketSize);
+    memcpy(receive(frame, packet, idealFrameStart), data, PacketSize);
 }

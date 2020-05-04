@@ -51,12 +51,20 @@ void SmoothLed::beginFade(uint16_t numFrames)
     m_Time = 0;
     m_DeltaTime = uint16_t(0x8000) / numFrames;
 }
+void SmoothLed::setFadePosition(uint16_t time)
+{
+    m_Time = time;
+}
+void SmoothLed::setFadeRate(uint16_t speed)
+{
+    m_DeltaTime = speed;
+}
 uint8_t SmoothLed::updateTime()
 {
     uint8_t lastT = highByte(m_Time);
+    if (lastT >= 0x80)
+        return 0;
     m_Time += m_DeltaTime;
-    if (highByte(m_Time) > 0x80)
-        m_Time = 0x8000;
     return highByte(m_Time) - lastT;
 }
 
