@@ -162,7 +162,7 @@ SmoothLedUpdate:
         st      Z+, r21                 ; 1
 
         subi    r24, 1                  ; 1
-        brcc    0b                      ; 2   10     64
+        brcc    0b                      ; 2   4      58
         subi    r25, 1
         brcc    0b
 
