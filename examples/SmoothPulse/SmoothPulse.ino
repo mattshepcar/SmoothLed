@@ -1,7 +1,7 @@
 #include <SmoothLed.h>
 #include <avr/wdt.h>
 
-#define NUM_LEDS 10
+#define NUM_LEDS 8
 #define LED_CHANNELS 3 // use 4 for RGBW strands
 
 SmoothLed::Interpolator interpolators[NUM_LEDS * LED_CHANNELS];
@@ -13,6 +13,7 @@ void setup()
     leds.begin(
         SmoothLedCcl::PA7_LUT1, // pin where LED data line is connected
         SmoothLedCcl::PB1_USART0_ASYNCCH1); // this pin will be an output but is only used for the clock signal
+    leds.update();
 }
 
 void loop() 
