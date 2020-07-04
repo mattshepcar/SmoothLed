@@ -16,10 +16,10 @@ public:
     enum EventChannel { ASYNCCH0, ASYNCCH1, ASYNCCH2, ASYNCCH3 };
 
     void begin(OutputPinLut outpin = PA4_LUT0, ClockSetting sck = PB1_USART0_ASYNCCH1,
-        volatile TCB_t& tcb = TCB0, int lowPulseNs = 200, int highPulseNs = 550);
+        volatile TCB_t& tcb = TCB0, int lowPulseNs = 200, int highPulseNs = 600);
     void begin(OutputPinEvent outpin, ClockSetting sck = PA3_USART0_ASYNCCH0,
         volatile TCB_t& tcb = TCB0, Lut lut = LUT0, EventChannel channel = ASYNCCH3, 
-        int lowPulseNs = 200, int highPulseNs = 550);
+        int lowPulseNs = 200, int highPulseNs = 600);
 
     void beginTransaction();
     void write(uint8_t value);
