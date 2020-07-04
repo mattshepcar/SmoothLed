@@ -8,12 +8,15 @@
 class SmoothLedCcl
 {
 public:
+    // output pins tied to a specific CCL LUT
     enum OutputPinLut { PA4_LUT0, PB4_LUT0, PA7_LUT1, PC1_LUT1 };
+    // output pins using user specified LUT and async event channel
     enum OutputPinEvent { PA2, PB2, PC2 };
+    enum EventChannel { ASYNCCH0, ASYNCCH1, ASYNCCH2, ASYNCCH3 };
     enum Lut { LUT0, LUT1 };
+    // clock pins are tied to a specific usart/spi peripheral and async event channel
     enum ClockSetting { PA3_USART0_ASYNCCH0, PA3_SPI0_ASYNCCH0,
                         PB1_USART0_ASYNCCH1, PC0_SPI0_ASYNCCH2 };
-    enum EventChannel { ASYNCCH0, ASYNCCH1, ASYNCCH2, ASYNCCH3 };
 
     void begin(OutputPinLut outpin = PA4_LUT0, ClockSetting sck = PB1_USART0_ASYNCCH1,
         volatile TCB_t& tcb = TCB0, int lowPulseNs = 200, int highPulseNs = 600);
@@ -36,6 +39,7 @@ public:
 
     bool isSpi() const;
 
+    // internal peripheral setup used by begin:
     void beginTimer(ClockSetting sck, volatile TCB_t& tcb, int lowPulseNs, int highPulseNs);
     void beginCclLut(Lut lut, volatile TCB_t& tcb, bool enable = false);
     static void beginEvent(OutputPinEvent outpin, Lut lut, EventChannel channel);
@@ -80,6 +84,7 @@ inline void SmoothLedCcl::beginTimer(ClockSetting sck, volatile TCB_t& tcb,
     {
     case PA3_USART0_ASYNCCH0:
         PORTMUX.CTRLB |= PORTMUX_USART0_ALTERNATE_gc;
+        // falls through
     case PA3_SPI0_ASYNCCH0:
         EVSYS_ASYNCCH0 = EVSYS_ASYNCCH0_PORTA_PIN3_gc;
         TCBEV = EVSYS_ASYNCUSER0_ASYNCCH0_gc;
@@ -161,10 +166,10 @@ inline void SmoothLedCcl::disableOutput(OutputPinLut outpin)
 {
     switch (outpin)
     {
-    case PA4_LUT0: CCL.LUT0CTRLA &= ~CCL_OUTEN_bm; break;
-    case PA7_LUT1: CCL.LUT1CTRLA &= ~CCL_OUTEN_bm; break;
-    case PB4_LUT0: CCL.LUT0CTRLA &= ~CCL_OUTEN_bm; PORTMUX.CTRLA &= ~PORTMUX_LUT0_bm; break;
-    case PC1_LUT1: CCL.LUT1CTRLA &= ~CCL_OUTEN_bm; PORTMUX.CTRLA &= ~PORTMUX_LUT1_bm; break;
+    case PA4_LUT0: CCL.LUT0CTRLA = 0; break;
+    case PA7_LUT1: CCL.LUT1CTRLA = 0; break;
+    case PB4_LUT0: CCL.LUT0CTRLA = 0; PORTMUX.CTRLA &= ~PORTMUX_LUT0_bm; break;
+    case PC1_LUT1: CCL.LUT1CTRLA = 0; PORTMUX.CTRLA &= ~PORTMUX_LUT1_bm; break;
     }
 }
 inline void SmoothLedCcl::enableOutput(OutputPinEvent outpin)
