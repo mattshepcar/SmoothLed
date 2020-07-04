@@ -156,10 +156,26 @@ inline void SmoothLedCcl::enableOutput(OutputPinLut outpin)
 {
     switch (outpin)
     {
-    case PA4_LUT0: CCL.LUT0CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
-    case PA7_LUT1: CCL.LUT1CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
-    case PB4_LUT0: PORTMUX.CTRLA |= PORTMUX_LUT0_bm; CCL.LUT0CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
-    case PC1_LUT1: PORTMUX.CTRLA |= PORTMUX_LUT1_bm; CCL.LUT1CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
+    case PA4_LUT0: 
+        VPORTA.DIR |= _BV(4); 
+        CCL.LUT0CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; 
+        break;
+    case PA7_LUT1: 
+        VPORTA.DIR |= _BV(7); 
+        CCL.LUT1CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; 
+        break;
+    case PB4_LUT0: 
+        VPORTB.DIR |= _BV(4); 
+        PORTMUX.CTRLA |= PORTMUX_LUT0_bm; 
+        CCL.LUT0CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; 
+        break;
+    case PC1_LUT1: 
+#ifdef VPORTC
+        VPORTC.DIR |= _BV(1); 
+        PORTMUX.CTRLA |= PORTMUX_LUT1_bm; 
+        CCL.LUT1CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; 
+#endif
+        break;
     }
 }
 inline void SmoothLedCcl::disableOutput(OutputPinLut outpin)
@@ -175,6 +191,16 @@ inline void SmoothLedCcl::disableOutput(OutputPinLut outpin)
 inline void SmoothLedCcl::enableOutput(OutputPinEvent outpin)
 {
     PORTMUX.CTRLA |= (PORTMUX_EVOUT0_bm << outpin);
+    switch (outpin)
+    {
+    case PA2: VPORTA.DIR |= _BV(2); break;
+    case PB2: VPORTB.DIR |= _BV(2); break;
+    case PC2: 
+#ifdef VPORTC
+        VPORTC.DIR |= _BV(2); 
+#endif
+        break;
+    }
 }
 inline void SmoothLedCcl::disableOutput(OutputPinEvent outpin)
 {
