@@ -1,7 +1,6 @@
 #pragma once
 
 #include "SmoothLedBuffer.h"
-#include "SmoothLedMultiply.h"
 
 template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
 class SmoothLedReceiver
@@ -17,15 +16,17 @@ public:
 
 private:
     uint8_t m_Frame = 0;
-    uint8_t m_LastReceivedFrame = 0;
     uint8_t m_UpdateCount = 0;
+    uint8_t m_LastReceivedFrame = 0;
     uint8_t m_TimeSinceLastFrame = 0;
     int16_t m_LastError = 0;
     int16_t m_ErrorI = 0;
 
+    typedef SmoothLedBuffer<PacketSize, NumBufferedFrames> Buffer;
+
     SmoothLed m_Leds;
     SmoothLed::Interpolator m_Interpolators[PacketSize * PacketsPerFrame];
-    SmoothLedBuffer<PacketSize, NumBufferedFrames> m_Buffer[PacketsPerFrame];
+    Buffer m_Buffer[PacketsPerFrame];
 };
 
 template<int PacketsPerFrame, int PacketSize, int NumBufferedFrames>
@@ -38,8 +39,6 @@ uint8_t SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::updat
     {
         // connection lost, reset 
         m_Leds.setFadeRate(0);
-        for (auto& buf : m_Buffer)
-            buf.reset();
     }
 
     if (!m_Leds.isFading() && m_UpdateCount >= minUpdatesPerFrame)
@@ -63,23 +62,27 @@ uint8_t* SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::rece
     uint8_t frame, uint8_t packet, uint8_t idealFrameStart)
 {
     uint8_t framesElapsed = frame - m_LastReceivedFrame;
-    if (framesElapsed > 0)
+    if (framesElapsed > 0 && packet < 3)
     {
         m_LastReceivedFrame = frame;
 
         uint16_t fadeRate = m_Leds.getFadeRate();
         if (fadeRate == 0)
         {
-            if (framesElapsed == 1 && m_TimeSinceLastFrame >= PacketsPerFrame * 2)
+            uint8_t frameLength = m_TimeSinceLastFrame / framesElapsed;
+            if (frameLength >= PacketsPerFrame * 2)
             {
-                m_UpdateCount = m_TimeSinceLastFrame >> 2;
                 m_Frame = frame - NumBufferedFrames;
-                m_Leds.beginFade(m_TimeSinceLastFrame);
-                m_Leds.setFadePosition(0x2000);
+                m_LastError = 0;
+                m_ErrorI = 0;
+                m_Leds.beginFade(frameLength);
+                m_Leds.setFadePosition(idealFrameStart << 8);
+                m_UpdateCount = (idealFrameStart * frameLength) >> 8;
+                for (Buffer& buffer : m_Buffer)
+                    buffer.reset();
             }
-            m_TimeSinceLastFrame = 0;
         }
-        else if (packet < 3)
+        else 
         {
             uint16_t estimate = ((m_Frame + NumBufferedFrames) << 8) + highByte(m_Leds.getFadePosition() << 1);
             uint16_t actual = (frame << 8) + idealFrameStart;
@@ -93,9 +96,9 @@ uint8_t* SmoothLedReceiver<PacketsPerFrame, PacketSize, NumBufferedFrames>::rece
             fadeRate += (error - m_LastError) * 64 / m_TimeSinceLastFrame; 
             m_LastError = error;
             m_Leds.setFadeRate(fadeRate);
-            m_TimeSinceLastFrame = 0;
         }
-    }        
+        m_TimeSinceLastFrame = 0;
+    }
     return m_Buffer[packet].getWriteBuffer(frame);
 }
 

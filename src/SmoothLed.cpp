@@ -1,6 +1,8 @@
 #include "SmoothLed.h"
 #include "SmoothLedMultiply.h"
 
+using namespace smoothled;
+
 #ifndef SMOOTHLED_ASM_UPDATE
 #define SMOOTHLED_ASM_UPDATE 1
 #endif
@@ -86,8 +88,7 @@ void SmoothLed::update(register8_t& data, register8_t& status)
     // 8 cycle per bit loop for maximum throughput at 8MHz
     SmoothLedUpdate8cpb(count, i, data, dt, ditherMask, maxvalue, gammaLut, status);
 #else
-    do
-    {
+    do {
         uint8_t value = i++->update(dt, gammaLut, maxvalue, ditherMask);
         while ((status & USART_DREIF_bm) == 0) {}
         data = value;
@@ -112,8 +113,7 @@ void SmoothLed::update(uint8_t* outputBuffer)
 #if SMOOTHLED_ASM_UPDATE
     SmoothLedUpdate(count, i, outputBuffer, dt, ditherMask, maxvalue, gammaLut);
 #else
-    do
-    {
+    do {
         *outputBuffer++ = i++->update(dt, gammaLut, maxvalue, ditherMask);
     } while (--count);
 #endif

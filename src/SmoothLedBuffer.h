@@ -53,22 +53,21 @@ uint8_t* SmoothLedBuffer<Size, NumBufferedFrames>::getWriteBuffer(uint8_t time)
 template<int Size, int NumBufferedFrames>
 void SmoothLedBuffer<Size, NumBufferedFrames>::update(uint8_t time, SmoothLed& leds, uint16_t startIndex)
 {
-    if (m_TimeToRun && --m_TimeToRun)
+    if (m_TimeToRun > 0 && --m_TimeToRun > 0)
         return;
-    if (!m_UsedEntries)
+    const uint8_t* data = nullptr;
+    while (m_TimeToRun <= 0 && m_UsedEntries)
     {
-        // no pending data, stop interpolators
-        leds.clearFadeTarget(startIndex, Size);
-        return;
+        data = m_Data[m_ReadIndex];
+        m_TimeToRun = m_Time[m_ReadIndex] - time;
+        if (++m_ReadIndex == NumBufferedFrames) 
+            m_ReadIndex = 0;
+        --m_UsedEntries;
     }
-    --m_UsedEntries;
-    m_TimeToRun = m_Time[m_ReadIndex] - time;
-    if (m_TimeToRun == 0)
-        m_TimeToRun = 1;
-    uint16_t fraction = uint16_t(0x8000) / m_TimeToRun;
-    leds.setFadeTarget(startIndex, m_Data[m_ReadIndex], Size, fraction);
-    if (++m_ReadIndex == NumBufferedFrames)
-        m_ReadIndex = 0;
+    if (m_TimeToRun > 0)
+        leds.setFadeTarget(startIndex, data, Size, uint16_t(0x8000) / m_TimeToRun);
+    else
+        leds.clearFadeTarget(startIndex, Size);
 }
 template<int Size, int NumBufferedFrames>
 inline uint8_t SmoothLedBuffer<Size, NumBufferedFrames>::getUsedEntries() const

@@ -1,5 +1,7 @@
 #pragma once
 
+namespace smoothled {
+
 inline int16_t mac(int16_t value, int16_t a, uint8_t b)
 {
     // value += (a * b) >> 8   9 cycles
@@ -76,3 +78,5 @@ inline uint16_t lerp(uint16_t a, uint16_t b, uint8_t t)
 {
     return mac(a, b - a, t);
 }
+
+} // namespace smoothled

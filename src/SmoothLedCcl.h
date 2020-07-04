@@ -16,10 +16,10 @@ public:
     enum EventChannel { ASYNCCH0, ASYNCCH1, ASYNCCH2, ASYNCCH3 };
 
     void begin(OutputPinLut outpin = PA4_LUT0, ClockSetting sck = PB1_USART0_ASYNCCH1,
-        volatile TCB_t& tcb = TCB0, int lowPulseNs = 200, int highPulseNs = 500);
+        volatile TCB_t& tcb = TCB0, int lowPulseNs = 200, int highPulseNs = 550);
     void begin(OutputPinEvent outpin, ClockSetting sck = PA3_USART0_ASYNCCH0,
         volatile TCB_t& tcb = TCB0, Lut lut = LUT0, EventChannel channel = ASYNCCH3, 
-        int lowPulseNs = 200, int highPulseNs = 500);
+        int lowPulseNs = 200, int highPulseNs = 550);
 
     void beginTransaction();
     void write(uint8_t value);
@@ -37,7 +37,7 @@ public:
     bool isSpi() const;
 
     void beginTimer(ClockSetting sck, volatile TCB_t& tcb, int lowPulseNs, int highPulseNs);
-    void beginCclLut(Lut lut, volatile TCB_t& tcb);
+    void beginCclLut(Lut lut, volatile TCB_t& tcb, bool enable = false);
     static void beginEvent(OutputPinEvent outpin, Lut lut, EventChannel channel);
     static void enableOutput(OutputPinLut outpin);
     static void disableOutput(OutputPinLut outpin);
@@ -63,7 +63,7 @@ inline void SmoothLedCcl::begin(OutputPinEvent outpin, ClockSetting sck, volatil
     Lut lut, EventChannel channel, int lowPulseNs, int highPulseNs)
 {
     beginTimer(sck, tcb, lowPulseNs, highPulseNs);
-    beginCclLut(lut, tcb);
+    beginCclLut(lut, tcb, true);
     beginEvent(outpin, lut, channel);
     enableOutput(outpin);
 }
@@ -71,7 +71,11 @@ inline void SmoothLedCcl::begin(OutputPinEvent outpin, ClockSetting sck, volatil
 inline void SmoothLedCcl::beginTimer(ClockSetting sck, volatile TCB_t& tcb,
     int lowPulseNs, int highPulseNs)
 {
+#ifdef TCB1
     register8_t& TCBEV = &tcb == &TCB0 ? EVSYS_ASYNCUSER0 : EVSYS_ASYNCUSER11;
+#else
+    register8_t& TCBEV = EVSYS_ASYNCUSER0;
+#endif
     switch (sck)
     {
     case PA3_USART0_ASYNCCH0:
@@ -79,15 +83,20 @@ inline void SmoothLedCcl::beginTimer(ClockSetting sck, volatile TCB_t& tcb,
     case PA3_SPI0_ASYNCCH0:
         EVSYS_ASYNCCH0 = EVSYS_ASYNCCH0_PORTA_PIN3_gc;
         TCBEV = EVSYS_ASYNCUSER0_ASYNCCH0_gc;
+        VPORTA.DIR |= _BV(3);
         break;
     case PB1_USART0_ASYNCCH1:
         EVSYS_ASYNCCH1 = EVSYS_ASYNCCH1_PORTB_PIN1_gc;
         TCBEV = EVSYS_ASYNCUSER0_ASYNCCH1_gc;
+        VPORTB.DIR |= _BV(1);
         break;
     case PC0_SPI0_ASYNCCH2:
+#ifdef VPORTC
         PORTMUX.CTRLB |= PORTMUX_SPI0_ALTERNATE_gc;
         EVSYS_ASYNCCH2 = EVSYS_ASYNCCH2_PORTC_PIN0_gc;
         TCBEV = EVSYS_ASYNCUSER0_ASYNCCH2_gc;
+        VPORTC.DIR |= _BV(0);
+#endif
         break;
     }
     uint8_t highCycles = max(nsToCycles(highPulseNs), 4);
@@ -121,14 +130,15 @@ inline void SmoothLedCcl::beginTimer(ClockSetting sck, volatile TCB_t& tcb,
 #define	CCL_INSEL2_TCB1_gc	(0x0D) // TODO: don't think this is actually valid...
 #endif
 
-inline void SmoothLedCcl::beginCclLut(Lut lut, volatile TCB_t& tcb)
+inline void SmoothLedCcl::beginCclLut(Lut lut, volatile TCB_t& tcb, bool enable)
 {
     register8_t* LUT = lut == LUT0 ? &CCL.LUT0CTRLA : &CCL.LUT1CTRLA;
     LUT[3] = 0b01010001; // !SCK && (!MOSI || TCB)
     LUT[2] = &tcb == &TCB0 ? CCL_INSEL2_TCB0_gc : CCL_INSEL2_TCB1_gc;
     LUT[1] = m_Spi ? CCL_INSEL1_SPI0_gc | CCL_INSEL0_SPI0_gc
                    : CCL_INSEL1_USART0_gc | CCL_INSEL0_USART0_gc;
-    LUT[0] = CCL_ENABLE_bm;
+    if (enable)
+        LUT[0] = CCL_ENABLE_bm;
 }
 
 inline void SmoothLedCcl::beginEvent(OutputPinEvent outpin, Lut lut, EventChannel channel)
@@ -141,10 +151,10 @@ inline void SmoothLedCcl::enableOutput(OutputPinLut outpin)
 {
     switch (outpin)
     {
-    case PA4_LUT0: CCL.LUT0CTRLA |= CCL_OUTEN_bm; break;
-    case PA7_LUT1: CCL.LUT1CTRLA |= CCL_OUTEN_bm; break;
-    case PB4_LUT0: PORTMUX.CTRLA |= PORTMUX_LUT0_bm; CCL.LUT0CTRLA |= CCL_OUTEN_bm; break;
-    case PC1_LUT1: PORTMUX.CTRLA |= PORTMUX_LUT1_bm; CCL.LUT1CTRLA |= CCL_OUTEN_bm; break;
+    case PA4_LUT0: CCL.LUT0CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
+    case PA7_LUT1: CCL.LUT1CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
+    case PB4_LUT0: PORTMUX.CTRLA |= PORTMUX_LUT0_bm; CCL.LUT0CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
+    case PC1_LUT1: PORTMUX.CTRLA |= PORTMUX_LUT1_bm; CCL.LUT1CTRLA = CCL_ENABLE_bm | CCL_OUTEN_bm; break;
     }
 }
 inline void SmoothLedCcl::disableOutput(OutputPinLut outpin)
@@ -196,7 +206,7 @@ inline void SmoothLedCcl::beginTransactionSpi()
 inline void SmoothLedCcl::writeSpi(uint8_t value)
 {
     while ((SPI0.INTFLAGS & SPI_DREIF_bm) == 0) {}
-    SPI0.DATA = value;
+    SPI0.DATA = ~value;
 }
 inline void SmoothLedCcl::endTransactionSpi()
 {
@@ -214,7 +224,7 @@ inline void SmoothLedCcl::beginTransactionUsart()
 inline void SmoothLedCcl::writeUsart(uint8_t value)
 {
     while ((USART0.STATUS & USART_DREIF_bm) == 0) {}
-    USART0.TXDATAL = value;
+    USART0.TXDATAL = ~value;
 }
 inline void SmoothLedCcl::endTransactionUsart()
 {
