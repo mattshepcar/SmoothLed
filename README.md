@@ -13,4 +13,8 @@ USART mode gives better control of the output bitrate so it's best to use the li
 
 # Dithering
 
-To benefit from temporal dithering the LED strip must be updated at a high frequency, preferably above 400Hz.  The slower you update the LEDs the more noticable flickering at low intensities will be.  This can be partially mitigated by adjusting the dither mask. Fewer bits will result in less flickering but more 'stair steppy' fades.
+To benefit from temporal dithering the LED strip must be updated at a high frequency, preferably above 400Hz.  The slower you update the LEDs the more noticable flickering at low intensities will be.  This can be partially mitigated by adjusting the dither mask with setDitherMask or in the SmoothLed constructor. Fewer bits will result in less flickering but more 'stair steppy' fades.
+
+# Gamma correction
+
+You can supply a custom gamma correction table with the setGammaLut function.  Use the python script in the SmoothLed/extras folder to generate a new table.
