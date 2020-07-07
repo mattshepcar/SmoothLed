@@ -18,3 +18,8 @@ To benefit from temporal dithering the LED strip must be updated at a high frequ
 # Gamma correction
 
 You can supply a custom gamma correction table with the setGammaLut function.  Use the python script in the SmoothLed/extras folder to generate a new table.
+
+
+# Thanks
+
+Thanks to kabasan on avrfreaks for providing an [example of using CCL and TCB](https://www.avrfreaks.net/comment/2879731#comment-2879731) to drive LEDs.  
