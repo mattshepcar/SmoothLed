@@ -7,8 +7,6 @@
 
 // This example cycles WS2812 LEDs through a sequence of 3 colours.
 // It does not perform any gamma correction, dithering or interpolation. 
-// The colour values are written directly to the LED strip so no
-// per-LED workspace memory is required.
 
 #define NUM_LEDS 8
 #define LED_CHANNELS 4
