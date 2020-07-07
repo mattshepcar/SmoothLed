@@ -237,7 +237,7 @@ inline void SmoothLedCcl::beginTransactionSpi()
 inline void SmoothLedCcl::writeSpi(uint8_t value)
 {
     while ((SPI0.INTFLAGS & SPI_DREIF_bm) == 0) {}
-    SPI0.DATA = ~value;
+    SPI0.DATA = value;
 }
 inline void SmoothLedCcl::endTransactionSpi()
 {
@@ -255,7 +255,7 @@ inline void SmoothLedCcl::beginTransactionUsart()
 inline void SmoothLedCcl::writeUsart(uint8_t value)
 {
     while ((USART0.STATUS & USART_DREIF_bm) == 0) {}
-    USART0.TXDATAL = ~value;
+    USART0.TXDATAL = value;
 }
 inline void SmoothLedCcl::endTransactionUsart()
 {
